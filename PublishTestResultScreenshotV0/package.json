@@ -1,0 +1,17 @@
+{
+  "name": "publish-test-result-screenshot",
+  "version": "0.0.1",
+  "description": "Publish screenshot for failed test",
+  "main": "index.js",
+  "author": "Eric Labelle",
+  "license": "ISC",
+  "dependencies": {
+    "azure-devops-node-api": "^9.0.1",
+    "azure-pipelines-task-lib": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^5.2.7",
+    "@types/node": "^12.7.2",
+    "@types/q": "^1.5.2"
+  }
+}
