@@ -4,7 +4,11 @@
 // process.env.SYSTEM_TEAMPROJECT = ""
 // process.env.INPUT_ORGANIZATION = ""
 // process.env.INPUT_SCREENSHOTFOLDER = ""
+// process.env.INPUT_INCLUDERELEASE = ""
+// process.env.INPUT_RELEASECONTEXT = ""
 // process.env.BUILD_BUILDID = ""
+// process.env.RELEASE_RELEASEID = ""
+// process.env.RELEASE_ENVIRONMENTID = ""
 // **********************************************************************************
 
 import * as tl from "azure-pipelines-task-lib/task"
@@ -14,21 +18,34 @@ import fs from "fs";
 import { TestOutcome, ShallowTestCaseResult, TestAttachmentRequestModel, TestAttachmentReference } from 'azure-devops-node-api/interfaces/TestInterfaces';
 
 const DEFAULT_SCREENSHOT_FOLDER = "./app/build/reports/androidTests/connected/screenshots/failures/";
+const DEFAULT_RELEASE_CONTEXT = "CD";
+const DEFAULT_SEPARATOR = "/";
 const PARAM_SCREENSHOT_FOLDER = "screenshotFolder";
 const PARAM_ORGANIZATION = "organization";
+const PARAM_INCLUDE_RELEASE = "includeRelease";
+const PARAM_RELEASE_CONTEXT = "releaseContext";
+const PARAM_SEPARATOR = "separator";
 
-let project = tl.getVariable("System.TeamProject");
+if (tl == null) {
+    throw new Error('Module azure-pipelines-task-lib/task not found');
+}
+
+let project = tl.getVariable("System.TeamProject") ?? '';
 let testApi: ta.ITestApi
 
 async function run() {
     try {
         let authToken = tl.getEndpointAuthorizationParameter('SystemVssConnection', 'AccessToken', false);
-        let authHandler = azdev.getPersonalAccessTokenHandler(authToken);
+        let authHandler = azdev.getPersonalAccessTokenHandler(authToken ?? '');
         let connection = new azdev.WebApi("https://dev.azure.com/" + getOrganization(), authHandler);
         testApi = await connection.getTestApi();
-        await testApi.getTestResultsByBuild(project, +tl.getVariable("Build.BuildId"), undefined, [TestOutcome.Failed])
+        await testApi.getTestResultsByBuild(project, +(tl.getVariable("Build.BuildId") ?? 0), undefined, [TestOutcome.Failed])
             .then(async failedTests =>  uploadScreenshots(failedTests))
             .catch(err => tl.setResult(tl.TaskResult.Failed, err.message))
+
+        if (Boolean(tl.getInput(PARAM_INCLUDE_RELEASE))) {
+            uploadReleaseTestScreenshots();
+        }
     }
     catch (err) {
         tl.setResult(tl.TaskResult.Failed, err.message);
@@ -50,16 +67,17 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
     failedTests.forEach(async (failedTest: ShallowTestCaseResult, index) => {
         let testName = failedTest.automatedTestName;
         let className = failedTest.automatedTestStorage;
-        let imgPath = getScreenshotFolder() + className + "/" + testName + ".png";//TODO make it configurable in upcoming version
+        const separator = tl.getVariable(PARAM_SEPARATOR) ?? DEFAULT_SEPARATOR;
+        let imgPath = `${getScreenshotFolder()}${className}${separator}${testName}.png`;//TODO make it configurable in upcoming version
         tl.debug("Searching for image at path: " + imgPath);
         if (fs.existsSync(imgPath)) {
             let imageAsBase64 = fs.readFileSync(imgPath, 'base64');
             let attachment: TestAttachmentRequestModel = {fileName: testName + ".png", stream: imageAsBase64};
-            
+
             apiCalls.push(testApi.createTestResultAttachment(attachment, project, failedTest.runId!, failedTest.id!));
         } else {
-            tl.debug("Failure - No screenshot found for " + className + "/" + testName);
-            missingScreenshots.push(Error("No screenshot found for " + className + "/" + testName));
+            tl.debug(`Failure - No screenshot found for ${className}${separator}${testName}`);
+            missingScreenshots.push(Error(`No screenshot found for ${className}${separator}${testName}`));
         }
     });
     Promise.all(apiCalls).then(function(attachmentResults) {
@@ -89,9 +107,13 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
  */
 function getScreenshotFolder(): string {
     let screenshotFolder = tl.getInput(PARAM_SCREENSHOT_FOLDER)
-    if (isNullEmptyOrUndefined(screenshotFolder)) {
+    if (screenshotFolder == null || isNullEmptyOrUndefined(screenshotFolder)) {
         return DEFAULT_SCREENSHOT_FOLDER
     } else {
+        const segments: string [] = screenshotFolder.split('/')
+                                                    .map((segment: string): string => segment.replace('$(', '').replace(')', ''))
+                                                    .map((segment: string): string => tl.getVariable(segment) ?? segment)
+        screenshotFolder = segments.join('/');
         return screenshotFolder += screenshotFolder.endsWith("/") ? "" : "/"
     }
 }
@@ -106,7 +128,7 @@ function getScreenshotFolder(): string {
  */
 function getOrganization(): string {
     let organization = tl.getInput(PARAM_ORGANIZATION)
-    if (isNullEmptyOrUndefined(organization)) {
+    if (organization == null || isNullEmptyOrUndefined(organization)) {
         throw Error("Organization is mandatory")
     } else {
         return organization
@@ -121,4 +143,53 @@ function getOrganization(): string {
  */
 function isNullEmptyOrUndefined(obj: any): boolean {
     return obj === null || obj === '' || obj === undefined
+}
+
+/**
+ * Get the input parameter "releaseContext"
+ *
+ * @returns the value from the input param or DEFAULT_RELEASE_CONTEXT
+ */
+function getReleaseContext(): string | undefined {
+    let releaseContext = tl.getInput(PARAM_RELEASE_CONTEXT)
+    if (Boolean(tl.getInput(PARAM_INCLUDE_RELEASE)) && isNullEmptyOrUndefined(releaseContext)) {
+        return DEFAULT_RELEASE_CONTEXT
+    } else {
+        return releaseContext
+    }
+}
+
+/**
+ * Retrieves a variable with a given name as a number or 0.
+ *
+ * @param name The name of the variable.
+ */
+function getVariableAsNumber(name: string): number {
+    const val = tl.getVariable(name);
+    if (val == null) {
+        tl.debug(`Variable ${name} is null | undefined. Will use 0.`)
+    }
+    return +(val ?? 0)
+}
+
+/**
+ * Retrieves a variable with a given name as a number or undefined
+ *
+ * @param name The name of the variable.
+ */
+function getVariableAsNumberOrUndefined(name: string): number | undefined {
+    const val = tl.getVariable(name);
+    if (val != null) {
+        return +val
+    }
+    return undefined
+}
+
+/**
+ * Attempt to upload results for test failures during a release.
+ */
+async function uploadReleaseTestScreenshots(): Promise<void> {
+    await testApi.getTestResultsByRelease(project, getVariableAsNumber("Release.ReleaseId"), getVariableAsNumberOrUndefined("Release.EnvironmentId"), getReleaseContext(), [TestOutcome.Failed])
+        .then(async failedTests =>  uploadScreenshots(failedTests))
+        .catch(err => tl.setResult(tl.TaskResult.Failed, err.message));
 }
