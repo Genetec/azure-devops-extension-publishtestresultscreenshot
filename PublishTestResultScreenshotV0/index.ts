@@ -54,10 +54,11 @@ async function run() {
 
 run();
 
-async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
+async function uploadScreenshots(failedTests: ShallowTestCaseResult[] | null) {
     let apiCalls: Promise<any>[] = [];
     let missingScreenshots: Error[] = [];
-    let totalFailures = failedTests.length
+    failedTests = failedTests || [];
+    let totalFailures = failedTests.length;
 
     if(totalFailures <= 0) {
         tl.setResult(tl.TaskResult.Skipped, "No test failures found.")
@@ -68,6 +69,7 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
         let testName = failedTest.automatedTestName;
         let className = failedTest.automatedTestStorage;
         const separator = tl.getVariable(PARAM_SEPARATOR) ?? DEFAULT_SEPARATOR;
+        tl.debug("Using separator:" + separator);
         let imgPath = `${getScreenshotFolder()}${className}${separator}${testName}.png`;//TODO make it configurable in upcoming version
         tl.debug("Searching for image at path: " + imgPath);
         if (fs.existsSync(imgPath)) {
