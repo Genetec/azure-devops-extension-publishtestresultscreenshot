@@ -11,7 +11,8 @@ import * as tl from "azure-pipelines-task-lib/task"
 import * as azdev from "azure-devops-node-api";
 import * as ta from "azure-devops-node-api/TestApi";
 import fs from "fs";
-import { TestOutcome, ShallowTestCaseResult, TestAttachmentRequestModel, TestAttachmentReference } from 'azure-devops-node-api/interfaces/TestInterfaces';
+import { TestOutcome, TestAttachmentRequestModel, TestAttachmentReference, TestRun, TestCaseResult, ResultDetails } from 'azure-devops-node-api/interfaces/TestInterfaces';
+import filenamify = require('filenamify');
 
 const DEFAULT_SCREENSHOT_FOLDER = "./app/build/reports/androidTests/connected/screenshots/failures/";
 const PARAM_SCREENSHOT_FOLDER = "screenshotFolder";
@@ -26,9 +27,16 @@ async function run() {
         let authHandler = azdev.getPersonalAccessTokenHandler(authToken);
         let connection = new azdev.WebApi("https://dev.azure.com/" + getOrganization(), authHandler);
         testApi = await connection.getTestApi();
-        await testApi.getTestResultsByBuild(project, +tl.getVariable("Build.BuildId"), undefined, [TestOutcome.Failed])
-            .then(async failedTests =>  uploadScreenshots(failedTests))
-            .catch(err => tl.setResult(tl.TaskResult.Failed, err.message))
+
+        let system = tl.getVariable("SYSTEM");
+        
+        try {
+            let testRunId = await getTestRunIdBy(system);
+            let results = await getFailureResultsBy(testRunId);
+            await uploadScreenshots(results);
+        }catch(err){ 
+            tl.setResult(tl.TaskResult.Failed, err.message); 
+        }
     }
     catch (err) {
         tl.setResult(tl.TaskResult.Failed, err.message);
@@ -37,7 +45,56 @@ async function run() {
 
 run();
 
-async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
+/**
+ * Given system [build or release] returning the Id of the latest TestRun 
+ * @param system 
+ * @returns Latest TestRun Id
+ */
+async function getTestRunIdBy(system : string): Promise<number> {
+    let ret :number = -1;
+    let testRuns : TestRun[] = [];
+    let today = new Date();
+    let yesterday = new Date();
+    yesterday.setDate(today.getDate() -1);
+
+    let buildid = tl.getVariable("BUILD_BUILDID");
+    switch(system) {
+        case "build":
+            testRuns = await testApi.queryTestRuns(project, yesterday, today, undefined, undefined, undefined, undefined, [+buildid], undefined, undefined, undefined, undefined, undefined, undefined,undefined, undefined,undefined );
+            break;
+        case "release":
+            let releaseId = tl.getVariable("RELEASE_RELEASEID");
+            let releaseEnvId = tl.getVariable("RELEASE_ENVIRONMENTID");
+            testRuns = await testApi.queryTestRuns(project, yesterday, today, undefined, undefined, undefined, undefined, [+buildid], undefined, undefined, [+releaseId], undefined, [+releaseEnvId], undefined,undefined, undefined,undefined );
+            break;
+        default:
+            tl.debug(`unsupported system value: ${system}`);
+    }
+
+    if (testRuns.length === 1){
+        ret = testRuns[0].id;
+    }
+    else if (testRuns.length > 1) {
+        // when query return more than 1 Run, sort desc and pick the first.
+        ret = testRuns.map( run=> run.id).sort((a,b)=> b-a)[0]; 
+    }
+
+    return ret;
+}
+
+/**
+ * Give a runId return an array of TestCaseResult which TestOutcome is failed
+ * @param runId 
+ * @returns an array of TestCaseResult
+ */
+async function getFailureResultsBy(runId: number) :  Promise<TestCaseResult[]>{
+    let ret : TestCaseResult[] = [];
+    ret = await testApi.getTestResults(project, runId, ResultDetails.None, undefined, undefined,[TestOutcome.Failed] );
+    return ret;
+}
+
+
+async function uploadScreenshots(failedTests: TestCaseResult[]) {
     let apiCalls: Promise<any>[] = [];
     let missingScreenshots: Error[] = [];
     let totalFailures = failedTests.length
@@ -47,16 +104,23 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
         return
     }
     console.log(totalFailures + " tests failed. Will proceed with screenshot upload.")
-    failedTests.forEach(async (failedTest: ShallowTestCaseResult, index) => {
-        let testName = failedTest.automatedTestName;
+    failedTests.forEach(async (failedTest: TestCaseResult, index) => {
+        let testName = failedTest.automatedTestName ?? '';
         let className = failedTest.automatedTestStorage;
-        let imgPath = getScreenshotFolder() + className + "/" + testName + ".png";//TODO make it configurable in upcoming version
+        let imgPath = getScreenshotFolder() + className + "/" + filenamify(testName) + ".png";//TODO make it configurable in upcoming version
         tl.debug("Searching for image at path: " + imgPath);
         if (fs.existsSync(imgPath)) {
             let imageAsBase64 = fs.readFileSync(imgPath, 'base64');
             let attachment: TestAttachmentRequestModel = {fileName: testName + ".png", stream: imageAsBase64};
             
-            apiCalls.push(testApi.createTestResultAttachment(attachment, project, failedTest.runId!, failedTest.id!));
+            let testRunIdStr : string = failedTest?.testRun?.id ?? '-1';
+
+            if(testRunIdStr == '-1') {
+                tl.debug('Unable to get testRun.id');
+                return;
+            }
+
+            apiCalls.push(testApi.createTestResultAttachment(attachment, project, +testRunIdStr, failedTest.id!));
         } else {
             tl.debug("Failure - No screenshot found for " + className + "/" + testName);
             missingScreenshots.push(Error("No screenshot found for " + className + "/" + testName));
