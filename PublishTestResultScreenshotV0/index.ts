@@ -71,10 +71,10 @@ async function getTestRunIdBy(system : string): Promise<number> {
             tl.debug(`unsupported system value: ${system}`);
     }
 
-    if (testRuns.length === 1){
+    if (testRuns?.length === 1){
         ret = testRuns[0].id;
     }
-    else if (testRuns.length > 1) {
+    else if (testRuns?.length > 1) {
         // when query return more than 1 Run, sort desc and pick the first.
         ret = testRuns.map( run=> run.id).sort((a,b)=> b-a)[0]; 
     }
@@ -97,7 +97,7 @@ async function getFailureResultsBy(runId: number) :  Promise<TestCaseResult[]>{
 async function uploadScreenshots(failedTests: TestCaseResult[]) {
     let apiCalls: Promise<any>[] = [];
     let missingScreenshots: Error[] = [];
-    let totalFailures = failedTests.length
+    let totalFailures = failedTests?.length ?? 0;
 
     if(totalFailures <= 0) {
         tl.setResult(tl.TaskResult.Skipped, "No test failures found.")
