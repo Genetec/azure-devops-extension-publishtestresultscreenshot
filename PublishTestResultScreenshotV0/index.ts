@@ -113,6 +113,7 @@ async function uploadScreenshots(failedTests: TestCaseResult[]) {
             let imageAsBase64 = fs.readFileSync(imgPath, 'base64');
             let attachment: TestAttachmentRequestModel = {fileName: testName + ".png", stream: imageAsBase64};
             
+            let testRunIdStr : string = failedTest?.testRun?.id ?? '-1';
             apiCalls.push(testApi.createTestResultAttachment(attachment, project, +testRunIdStr, failedTest.id!));
         } else {
             tl.debug("Failure - No screenshot found for " + className + "/" + testName);
