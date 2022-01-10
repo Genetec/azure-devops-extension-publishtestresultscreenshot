@@ -10,7 +10,7 @@
 import * as tl from "azure-pipelines-task-lib/task"
 import * as azdev from "azure-devops-node-api";
 import * as ta from "azure-devops-node-api/TestApi";
-import fs from "fs";
+import * as fs from "fs";
 import { TestOutcome, ShallowTestCaseResult, TestAttachmentRequestModel, TestAttachmentReference } from 'azure-devops-node-api/interfaces/TestInterfaces';
 
 const DEFAULT_SCREENSHOT_FOLDER = "./app/build/reports/androidTests/connected/screenshots/failures/";
