@@ -19,10 +19,27 @@ const PARAM_ORGANIZATION = "organization";
 
 let project = tl.getVariable("System.TeamProject");
 let testApi: ta.ITestApi
+let buildId = tl.getVariable("Build.BuildId");
 
 async function run() {
     try {
+        tl.setResult(tl.TaskResult.SucceededWithIssues, "THE CURRENT TASK IS BEING DEPRECATED ON JULY 18, 2024", false);
         let authToken = tl.getEndpointAuthorizationParameter('SystemVssConnection', 'AccessToken', false);
+        if (!authToken) {
+          tl.setResult(tl.TaskResult.Failed, "Could not get access token. Please check the endpoint configuration.", true);
+          return;
+        }
+
+        if (!project) {
+          tl.setResult(tl.TaskResult.Failed, "Could not get project name. Please check the endpoint configuration.", true);
+          return;
+        }
+
+        if (!buildId) {
+          tl.setResult(tl.TaskResult.Failed, "Could not get build id. Please check the endpoint configuration.", true);
+          return;
+        }
+
         let authHandler = azdev.getPersonalAccessTokenHandler(authToken);
         let connection = new azdev.WebApi("https://dev.azure.com/" + getOrganization(), authHandler);
         testApi = await connection.getTestApi();
@@ -31,7 +48,7 @@ async function run() {
             .catch(err => tl.setResult(tl.TaskResult.Failed, err.message))
     }
     catch (err) {
-        tl.setResult(tl.TaskResult.Failed, err.message);
+        tl.setResult(tl.TaskResult.Failed, (err as Error).message);
     }
 }
 
@@ -55,7 +72,7 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
         if (fs.existsSync(imgPath)) {
             let imageAsBase64 = fs.readFileSync(imgPath, 'base64');
             let attachment: TestAttachmentRequestModel = {fileName: testName + ".png", stream: imageAsBase64};
-            
+
             apiCalls.push(testApi.createTestResultAttachment(attachment, project, failedTest.runId!, failedTest.id!));
         } else {
             tl.debug("Failure - No screenshot found for " + className + "/" + testName);
@@ -84,7 +101,7 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
 
 /**
  * Get the input parameter "screenshotFolder"
- * 
+ *
  * @returns the value from the input param or DEFAULT_SCREENSHOT_FOLDER
  */
 function getScreenshotFolder(): string {
@@ -98,9 +115,9 @@ function getScreenshotFolder(): string {
 
 /**
  * Get the input parameter "organization" in order to make REST calls
- * 
+ *
  * **NOTE**: this is needed until a System.OrganizationName is exposed (*see: https://developercommunity.visualstudio.com/idea/747962/add-a-variable-to-access-organization-name.html*)
- * 
+ *
  * @returns the organization
  * @throws an error if no value was given
  */
@@ -115,7 +132,7 @@ function getOrganization(): string {
 
 /**
  * Test the given parameter to see if it's usable.
- * 
+ *
  * @param obj the obj to test
  * @returns true if the param is neither either null, empty, or undefined
  */
