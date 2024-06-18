@@ -1,5 +1,6 @@
 # PublishTestResultScreenshot for Azure DevOps
-**DEPRECATED**: This Azure DevOps extension is no longer maintained.
+**DEPRECATED**: This Azure DevOps extension is no longer maintained. An alternative solution is to use the `Publish Test
+Result task` which now supports [file attachments](https://devblogs.microsoft.com/devops/junit-attachments-support-for-publish-test-results/).
 
 Get more insight on your UI test failure with screenshots.
 
