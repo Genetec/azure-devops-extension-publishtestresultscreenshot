@@ -1,5 +1,8 @@
 # PublishTestResultScreenshot for Azure DevOps
-Get more insight on your UI test failure with screenshots. 
+**DEPRECATED**: This Azure DevOps extension is no longer maintained. An alternative solution is to use the `Publish Test
+Result task` which now supports [file attachments](https://devblogs.microsoft.com/devops/junit-attachments-support-for-publish-test-results/).
+
+Get more insight on your UI test failure with screenshots.
 
 ## Installation
 You can get the task from the [Visual Studio MarketPlace](https://marketplace.visualstudio.com/items?itemName=Genetec.publish-test-result-screenshot).
@@ -90,7 +93,7 @@ I used the latest version but just make sure that all commands return a version 
 * `npm install`
 * `tsc`
 
-#### Execute the task locally 
+#### Execute the task locally
 * `node index.js`
 
 #### Deploy and test on DevOps
