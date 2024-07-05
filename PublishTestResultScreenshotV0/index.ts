@@ -23,7 +23,7 @@ let buildId = tl.getVariable("Build.BuildId");
 
 async function run() {
     try {
-        tl.warning("THE CURRENT TASK IS BEING DEPRECATED ON JULY 18, 2024");
+        tl.warning("THE CURRENT TASK IS BEING DEPRECATED ON AUGUST 5, 2024");
         let authToken = tl.getEndpointAuthorizationParameter('SystemVssConnection', 'AccessToken', false);
         if (!authToken) {
           tl.setResult(tl.TaskResult.Failed, "Could not get access token. Please check the endpoint configuration.", true);
