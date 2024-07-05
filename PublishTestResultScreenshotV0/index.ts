@@ -23,7 +23,7 @@ let buildId = tl.getVariable("Build.BuildId");
 
 async function run() {
     try {
-        tl.warning("THE CURRENT TASK IS BEING DEPRECATED ON JULY 18, 2024");
+        tl.warning("THE CURRENT TASK IS BEING DEPRECATED ON AUGUST 5, 2024");
         let authToken = tl.getEndpointAuthorizationParameter('SystemVssConnection', 'AccessToken', false);
         if (!authToken) {
           tl.setResult(tl.TaskResult.Failed, "Could not get access token. Please check the endpoint configuration.", true);
@@ -43,7 +43,7 @@ async function run() {
         let authHandler = azdev.getPersonalAccessTokenHandler(authToken);
         let connection = new azdev.WebApi("https://dev.azure.com/" + getOrganization(), authHandler);
         testApi = await connection.getTestApi();
-        await testApi.getTestResultsByBuild(project, +tl.getVariable("Build.BuildId"), undefined, [TestOutcome.Failed])
+        await testApi.getTestResultsByBuild(project, +buildId, undefined, [TestOutcome.Failed])
             .then(async failedTests =>  uploadScreenshots(failedTests))
             .catch(err => tl.setResult(tl.TaskResult.Failed, err.message))
     }
@@ -73,7 +73,7 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
             let imageAsBase64 = fs.readFileSync(imgPath, 'base64');
             let attachment: TestAttachmentRequestModel = {fileName: testName + ".png", stream: imageAsBase64};
 
-            apiCalls.push(testApi.createTestResultAttachment(attachment, project, failedTest.runId!, failedTest.id!));
+            apiCalls.push(testApi.createTestResultAttachment(attachment, project!, failedTest.runId!, failedTest.id!));
         } else {
             tl.debug("Failure - No screenshot found for " + className + "/" + testName);
             missingScreenshots.push(Error("No screenshot found for " + className + "/" + testName));
@@ -106,7 +106,7 @@ async function uploadScreenshots(failedTests: ShallowTestCaseResult[]) {
  */
 function getScreenshotFolder(): string {
     let screenshotFolder = tl.getInput(PARAM_SCREENSHOT_FOLDER)
-    if (isNullEmptyOrUndefined(screenshotFolder)) {
+    if (!screenshotFolder) {
         return DEFAULT_SCREENSHOT_FOLDER
     } else {
         return screenshotFolder += screenshotFolder.endsWith("/") ? "" : "/"
@@ -123,19 +123,10 @@ function getScreenshotFolder(): string {
  */
 function getOrganization(): string {
     let organization = tl.getInput(PARAM_ORGANIZATION)
-    if (isNullEmptyOrUndefined(organization)) {
+    if (!organization) {
         throw Error("Organization is mandatory")
     } else {
         return organization
     }
 }
 
-/**
- * Test the given parameter to see if it's usable.
- *
- * @param obj the obj to test
- * @returns true if the param is neither either null, empty, or undefined
- */
-function isNullEmptyOrUndefined(obj: any): boolean {
-    return obj === null || obj === '' || obj === undefined
-}
